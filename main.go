@@ -17,15 +17,14 @@ import (
 type ConnectSQL struct {
 	DBname    string
 	Tablename string
-	ID        any
 	Conn      *sql.DB
 }
 
 // Init inits the data
 // note: as you been providing teh config it will also set the default environment too
 // note: id can be the id for the fetched id that you are going to query for
-func (conn_ *ConnectSQL) Init(dbname, tablename string, id any, config *mysql.Config) (*ConnectSQL, error) {
-	log.SetFlags(log.Ldate | log.Ltime)
+func (conn_ *ConnectSQL) Init(dbname, tablename string, config *mysql.Config) (*ConnectSQL, error) {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	err := os.Setenv(config.User, config.User)
 	if err != nil {
@@ -49,7 +48,6 @@ func (conn_ *ConnectSQL) Init(dbname, tablename string, id any, config *mysql.Co
 	conn_.Conn = _conn
 	conn_.DBname = dbname
 	conn_.Tablename = tablename
-	conn_.ID = id
 
 	return conn_, nil
 }
@@ -58,11 +56,11 @@ func (conn_ *ConnectSQL) DB() *sql.DB {
 	return conn_.Conn
 }
 
-// ExtractSingleDataFromJSON returns the value of the field
-func (conn_ *ConnectSQL) ExtractSingleDataFromJSON(tablename, extractToken, json_ string, token any) error {
+// ExtractSingleDataFromJSON returns the value of the field in the src
+func (conn_ *ConnectSQL) ExtractSingleDataFromJSON(extractToken, jsonStructName string, id any, src any) error {
 	conn := conn_.Conn
-	id := conn_.ID
-	var exists, err = conn_.HasID(tablename)
+	tablename := conn_.Tablename
+	var exists, err = conn_.HasID(id)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -70,8 +68,8 @@ func (conn_ *ConnectSQL) ExtractSingleDataFromJSON(tablename, extractToken, json
 
 	if exists {
 		q := fmt.Sprintf(`select JSON_EXTRACT(%s,"$.%s") from %s where id = ?`,
-			json_, extractToken, tablename)
-		if err := conn.QueryRow(q, id).Scan(token); err != nil {
+			jsonStructName, extractToken, tablename)
+		if err := conn.QueryRow(q, id).Scan(src); err != nil {
 			log.Println(err)
 			return err
 		}
@@ -82,20 +80,20 @@ func (conn_ *ConnectSQL) ExtractSingleDataFromJSON(tablename, extractToken, json
 	return nil
 }
 
-// PatchNonJSON patches the token based on query
-func (conn_ *ConnectSQL) PatchNonJSON(query string, args ...any) error {
+// Prepare patches the token based on query
+func (conn_ *ConnectSQL) Prepare(query string, args ...any) error {
 	conn := conn_.Conn
 	stmt, err := conn.Prepare(query)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
+	defer stmt.Close()
 
 	if _, err := stmt.Exec(args...); err != nil {
 		log.Println(err)
 		return nil
 	}
-
 	return nil
 }
 
@@ -113,10 +111,10 @@ func (conn_ *ConnectSQL) Validation(query, arg string) (bool, error) {
 }
 
 // ExtractSingleData returns the one of the valid token
-func (conn_ *ConnectSQL) ExtractSingleData(tablename, extractToken string, token any) error {
-	id := conn_.ID
+func (conn_ *ConnectSQL) ExtractSingleData(extractToken string, id any, token any) error {
 	conn := conn_.Conn
-	exists, err := conn_.HasID(tablename)
+	tablename := conn_.Tablename
+	exists, err := conn_.HasID(id)
 	if err != nil {
 		return err
 	}
@@ -139,21 +137,17 @@ func (conn_ *ConnectSQL) ExtractSingleData(tablename, extractToken string, token
 
 // ExtractData returns the struct data into json struct
 // json_struct_name must be the struct that is the kind of mysql
-func (conn_ *ConnectSQL) ExtractData(jsonStructName, tablename string, src any) error {
-	id := conn_.ID
+func (conn_ *ConnectSQL) ExtractData(jsonStructName string, id any, src any) error {
 	var exe []byte
-	exists, err := conn_.HasID(tablename)
+	tablename := conn_.Tablename
+
+	exists, err := conn_.HasID(id)
 
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 	conn := conn_.Conn
-
-	// Qexists := fmt.Sprintf("select exists (select 1 from %s where id =?)", tableName)
-	// if err := conn.QueryRow(Qexists, id).Scan(&exists); err != nil {
-	// 	panic(err)
-	// }
 
 	if exists {
 		fmt.Println("exists")
@@ -178,9 +172,9 @@ func (conn_ *ConnectSQL) ExtractData(jsonStructName, tablename string, src any) 
 
 // HasID returns true if exists
 // note: id either can be in string or binary
-func (conn_ *ConnectSQL) HasID(tablename string) (bool, error) {
+func (conn_ *ConnectSQL) HasID(id any) (bool, error) {
 	conn := conn_.Conn
-	id := conn_.ID
+	tablename := conn_.Tablename
 	var exists bool
 	Qexists := fmt.Sprintf("select exists (select 1 from %s where id =?)", tablename)
 	if err := conn.QueryRow(Qexists, id).Scan(&exists); err != nil {
@@ -197,4 +191,36 @@ func (conn_ *ConnectSQL) HasID(tablename string) (bool, error) {
 // singal is lost it closes
 func (conn_ *ConnectSQL) CloseDB() error {
 	return conn_.Conn.Close()
+}
+
+func (conn_ *ConnectSQL) Exe(query string, args ...any) error {
+	_, err := conn_.Conn.Exec(query)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
+}
+
+func (conn_ *ConnectSQL) ChangeTable(table string) {
+	conn_.Tablename = table
+}
+
+func (conn_ *ConnectSQL) UpdateSingleJSONentry(id any, jsonField string, jsonStructName string, newVal any) error {
+	q := fmt.Sprintf("update %s set %s = JSON_SET($.%s,?) where id= ?", conn_.Tablename, jsonStructName, jsonField)
+
+	if _, err := conn_.Conn.Exec(q, id, newVal); err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
+}
+
+func (conn_ *ConnectSQL) UpdateWholeJSONentry(id any, jsonStructName string, args ...any) error {
+	q := fmt.Sprintf("update %s set %s = ? where id  = ?", conn_.Tablename, jsonStructName)
+	if _, err := conn_.Conn.Exec(q, id, args); err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
 }
