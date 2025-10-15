@@ -2,6 +2,8 @@ MYSQL-MANAGER
 
 Motivation 🔥 
     to ease up the work of mysql rather 
+
+
 MYSQL MANAGER 2025_FIRST_UPDATE
 
 |   changes   |
