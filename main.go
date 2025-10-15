@@ -118,10 +118,7 @@ func (conn_ *ConnectSQL) ExtractSingleData(extractToken string, id any, token an
 	if err != nil {
 		return err
 	}
-	// Qexists := fmt.Sprintf("select exists (select 1 from %s where id = ?)", tablename)
-	// if err := conn.QueryRow(Qexists, id).Scan(&exists); err != nil {
-	// 	panic(err)
-	// }
+
 	if exists {
 		q := fmt.Sprintf("select %s from %s where id = ?", extractToken, tablename)
 		if err := conn.QueryRow(q, id).Scan(&token); err != nil {
@@ -193,6 +190,7 @@ func (conn_ *ConnectSQL) CloseDB() error {
 	return conn_.Conn.Close()
 }
 
+// Exe executes the query
 func (conn_ *ConnectSQL) Exe(query string, args ...any) error {
 	_, err := conn_.Conn.Exec(query)
 	if err != nil {
@@ -202,10 +200,12 @@ func (conn_ *ConnectSQL) Exe(query string, args ...any) error {
 	return nil
 }
 
+// ChangeTable updates the table
 func (conn_ *ConnectSQL) ChangeTable(table string) {
 	conn_.Tablename = table
 }
 
+// UpdateSingleJSONentry updates the specific value of the provided json struct
 func (conn_ *ConnectSQL) UpdateSingleJSONentry(id any, jsonField string, jsonStructName string, newVal any) error {
 	q := fmt.Sprintf("update %s set %s = JSON_SET($.%s,?) where id= ?", conn_.Tablename, jsonStructName, jsonField)
 
@@ -216,6 +216,7 @@ func (conn_ *ConnectSQL) UpdateSingleJSONentry(id any, jsonField string, jsonStr
 	return nil
 }
 
+// UpdateWholeJSONentry updates json struct
 func (conn_ *ConnectSQL) UpdateWholeJSONentry(id any, jsonStructName string, args ...any) error {
 	q := fmt.Sprintf("update %s set %s = ? where id  = ?", conn_.Tablename, jsonStructName)
 	if _, err := conn_.Conn.Exec(q, id, args); err != nil {
