@@ -65,9 +65,8 @@ func (conn_ *ConnectSQL) ExtractSingleDataFromJSON(extractToken, jsonStructName 
 		log.Println(err)
 		return err
 	}
-
 	if exists {
-		q := fmt.Sprintf(`select JSON_EXTRACT(%s,"$.%s") from %s where id = ?`,
+		q := fmt.Sprintf(`select %s ->>'$.%s' from %s where id = ?`,
 			jsonStructName, extractToken, tablename)
 		if err := conn.QueryRow(q, id).Scan(src); err != nil {
 			log.Println(err)
@@ -147,14 +146,12 @@ func (conn_ *ConnectSQL) ExtractData(jsonStructName string, id any, src any) err
 	conn := conn_.Conn
 
 	if exists {
-		fmt.Println("exists")
 		query := fmt.Sprintf("select %s from %s where id =?", jsonStructName, tablename)
 
 		if err := conn.QueryRow(query, id).Scan(&exe); err != nil {
 			log.Println(err)
 			return err
 		}
-		fmt.Println("ss: ", string(exe))
 		if err := json.Unmarshal(exe, src); err != nil {
 			log.Println(err)
 			return err
@@ -163,7 +160,6 @@ func (conn_ *ConnectSQL) ExtractData(jsonStructName string, id any, src any) err
 		log.Println(err)
 		return err
 	}
-	fmt.Println("done extracting")
 	return nil
 }
 
